@@ -40,7 +40,7 @@ REVERSE = True
 NON_REVERSE = False
 
 # The following table defines the parameters of well-known CRC algorithms.
-# The "Check" value is the CRC for the ASCII byte sequence "123456789". It
+# The "Check" value is the CRC for the ASCII byte sequence b"123456789". It
 # can be used for unit tests.
 _crc_definitions_table = [
 #       Name                Identifier-name,    Poly            Reverse         Init-value      XOR-out     Check
@@ -88,7 +88,7 @@ for table_entry in _crc_definitions_table:
     _crc_definitions.append(crc_definition)
     name = simplify_name(table_entry[0])
     if name in _crc_definitions_by_name:
-        raise Exception("Duplicate entry for '%s' in CRC table" % name)
+        raise Exception("Duplicate entry for '{0}' in CRC table".format(name))
     _crc_definitions_by_name[simplify_name(table_entry[0])] = crc_definition
     _crc_definitions_by_identifier[table_entry[1]] = crc_definition
 
@@ -99,8 +99,8 @@ class PredefinedCrc(crcmod.Crc):
         if not definition:
             definition = _crc_definitions_by_identifier.get(crc_name, None)
         if not definition:
-            raise KeyError("Unkown CRC name '%s'" % crc_name)
-        crcmod.Crc.__init__(self, poly=definition['poly'], initCrc=definition['init'], rev=definition['reverse'], xorOut=definition['xor_out'])
+            raise KeyError("Unkown CRC name '{0}'".format(crc_name))
+        super().__init__(poly=definition['poly'], initCrc=definition['init'], rev=definition['reverse'], xorOut=definition['xor_out'])
 
 
 # crcmod.predefined.Crc is an alias for crcmod.predefined.PredefinedCrc
