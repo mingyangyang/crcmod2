@@ -288,17 +288,27 @@ def mkCrcFun(poly, initCrc=~0L, rev=True, xorOut=0):
 # without the r.
 
 #-----------------------------------------------------------------------------
+# Return the number of binary bits required to represent the (abs) input value.
+# Note: in Python >= 3.1, integers have a bit_length() member function.
+
+def _bit_length(x):
+    x = abs(x)
+    n = 0
+    while x:
+        n += 1
+        x //= 2
+    return n
+
+#-----------------------------------------------------------------------------
 # Check the polynomial to make sure that it is acceptable and return the number
 # of bits in the CRC.
 
 def _verifyPoly(poly):
-    msg = 'The degree of the polynomial must be 8, 16, 24, 32 or 64'
+    msg = 'The degree of the polynomial must be between 1 and 128'
     poly = long(poly) # Use a common representation for all operations
-    for n in (8,16,24,32,64):
-        low = 1L<<n
-        high = low*2
-        if low <= poly < high:
-            return n
+    n = _bit_length(poly) - 1
+    if 1 <= n <= 128:
+        return n
     raise ValueError(msg)
 
 #-----------------------------------------------------------------------------
@@ -319,23 +329,24 @@ def _bitrev(x, n):
 # to build up the tables needed in the CRC algorithm.  Assumes the high order
 # bit of the polynomial has been stripped off.
 
-def _bytecrc(crc, poly, n):
+def _bytecrc(byte_data, poly, n, crc = 0):
     crc = long(crc)
     poly = long(poly)
     mask = 1L<<(n-1)
     for i in xrange(8):
-        if crc & mask:
+        if ((crc >> (n - 1)) ^ (byte_data >> 7)) & 0x01:
             crc = (crc << 1) ^ poly
         else:
             crc = crc << 1
+        byte_data <<= 1
     mask = (1L<<n) - 1
     crc = crc & mask
     if mask <= sys.maxint:
         return int(crc)
     return crc
 
-def _bytecrc_r(crc, poly, n):
-    crc = long(crc)
+def _bytecrc_r(byte_data, poly, n, crc = 0):
+    crc = long(crc ^ byte_data)
     poly = long(poly)
     for i in xrange(8):
         if crc & 1L:
@@ -359,7 +370,7 @@ def _bytecrc_r(crc, poly, n):
 def _mkTable(poly, n):
     mask = (1L<<n) - 1
     poly = long(poly) & mask
-    table = [_bytecrc(long(i)<<(n-8),poly,n) for i in xrange(256)]
+    table = [_bytecrc(i,poly,n) for i in xrange(256)]
     return table
 
 def _mkTable_r(poly, n):
@@ -419,6 +430,61 @@ def _verifyParams(poly, initCrc, xorOut):
     return (sizeBits, initCrc, xorOut)
 
 #-----------------------------------------------------------------------------
+# The following two functions returns a Python function to compute the CRC. They
+# are designed to work with any CRC width, and they may be used when there
+# is no width-specialised function for the selected CRC width.
+#
+# They must be passed parameters that are already verified & sanitized by
+# _verifyParams().
+#
+# The returned function is a pure Python implementation.
+
+def _mkGenericCrcFun(poly, sizeBits, initCrc, rev, xorOut):
+    crcMask = (1 << sizeBits) - 1
+    if sizeBits > 8:
+        crcLowerMask = (1 << (sizeBits - 8)) - 1
+        firstShift = sizeBits - 8
+        def crc_func(data, crc, table):
+            crc = crc & crcMask
+            for x in data:
+                crc = table[(ord(x) ^ (crc >> firstShift)) & 0xFF] ^ ((crc & crcLowerMask) << 8)
+            return crc
+        return crc_func
+    elif sizeBits == 8:
+        def crc_func(data, crc, table):
+            crc = crc & crcMask
+            for x in data:
+                crc = table[(ord(x) ^ crc) & 0xFF]
+            return crc
+        return crc_func
+    else: # sizeBits < 8
+        firstShift = 8 - sizeBits
+        print firstShift
+        def crc_func(data, crc, table):
+            crc = crc & crcMask
+            for x in data:
+                crc = table[(ord(x) ^ (crc << firstShift)) & 0xFF]
+            return crc
+        return crc_func
+
+def _mkGenericCrcFun_r(poly, sizeBits, initCrc, rev, xorOut):
+    crcMask = (1 << sizeBits) - 1
+    if sizeBits > 8:
+        def crc_func(data, crc, table):
+            crc = crc & crcMask
+            for x in data:
+                crc = table[(ord(x) ^ crc) & 0xFF] ^ (crc >> 8)
+            return crc
+        return crc_func
+    else: # sizeBites <= 8
+        def crc_func(data, crc, table):
+            crc = crc & crcMask
+            for x in data:
+                crc = table[(ord(x) ^ crc) & 0xFF]
+            return crc
+        return crc_func
+
+#-----------------------------------------------------------------------------
 # The following function returns a Python function to compute the CRC.
 #
 # It must be passed parameters that are already verified & sanitized by
@@ -431,15 +497,24 @@ def _verifyParams(poly, initCrc, xorOut):
 # In addition to this function, a list containing the CRC table is returned.
 
 def _mkCrcFun(poly, sizeBits, initCrc, rev, xorOut):
+    usePackedTable = _usingExtension
     if rev:
         tableList = _mkTable_r(poly, sizeBits)
-        _fun = _sizeMap[sizeBits][1]
+        try:
+            _fun = _sizeMap[sizeBits][1]
+        except KeyError:
+            _fun = _mkGenericCrcFun_r(poly, sizeBits, initCrc, rev, xorOut)
+            usePackedTable = False
     else:
         tableList = _mkTable(poly, sizeBits)
-        _fun = _sizeMap[sizeBits][0]
+        try:
+            _fun = _sizeMap[sizeBits][0]
+        except KeyError:
+            _fun = _mkGenericCrcFun(poly, sizeBits, initCrc, rev, xorOut)
+            usePackedTable = False
 
     _table = tableList
-    if _usingExtension:
+    if usePackedTable:
         _table = struct.pack(_sizeToTypeCode[sizeBits], *tableList)
 
     if xorOut == 0:
