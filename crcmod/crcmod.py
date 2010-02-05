@@ -92,7 +92,7 @@ class Crc:
             return
 
         (sizeBits, initCrc, xorOut) = _verifyParams(poly, initCrc, xorOut)
-        self.digest_size = sizeBits//8
+        self.digest_size = (sizeBits + 7) // 8
         self.initCrc = initCrc
         self.xorOut = xorOut
 
