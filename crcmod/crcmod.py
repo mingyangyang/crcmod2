@@ -430,59 +430,102 @@ def _verifyParams(poly, initCrc, xorOut):
     return (sizeBits, initCrc, xorOut)
 
 #-----------------------------------------------------------------------------
-# The following two functions returns a Python function to compute the CRC. They
-# are designed to work with any CRC width, and they may be used when there
+# The following function returns a Python function to compute the CRC. It
+# is designed to work with any CRC width, and may be used when there
 # is no width-specialised function for the selected CRC width.
 #
-# They must be passed parameters that are already verified & sanitized by
+# It must be passed parameters that are already verified & sanitized by
 # _verifyParams().
 #
 # The returned function is a pure Python implementation.
 
-def _mkGenericCrcFun(poly, sizeBits, initCrc, rev, xorOut):
+def _mkGenericCrcFunPython(poly, sizeBits, initCrc, rev, xorOut):
     crcMask = (1 << sizeBits) - 1
-    if sizeBits > 8:
-        crcLowerMask = (1 << (sizeBits - 8)) - 1
-        firstShift = sizeBits - 8
-        def crc_func(data, crc, table):
-            crc = crc & crcMask
-            for x in data:
-                crc = table[(ord(x) ^ (crc >> firstShift)) & 0xFF] ^ ((crc & crcLowerMask) << 8)
-            return crc
-        return crc_func
-    elif sizeBits == 8:
-        def crc_func(data, crc, table):
-            crc = crc & crcMask
-            for x in data:
-                crc = table[(ord(x) ^ crc) & 0xFF]
-            return crc
-        return crc_func
-    else: # sizeBits < 8
-        firstShift = 8 - sizeBits
-        print firstShift
-        def crc_func(data, crc, table):
-            crc = crc & crcMask
-            for x in data:
-                crc = table[(ord(x) ^ (crc << firstShift)) & 0xFF]
-            return crc
-        return crc_func
+    if rev:
+        if sizeBits > 8:
+            def crc_func(data, crc, table):
+                crc = crc & crcMask
+                for x in data:
+                    crc = table[(ord(x) ^ crc) & 0xFF] ^ (crc >> 8)
+                return crc
+            return crc_func
+        else: # sizeBites <= 8
+            def crc_func(data, crc, table):
+                crc = crc & crcMask
+                for x in data:
+                    crc = table[(ord(x) ^ crc) & 0xFF]
+                return crc
+            return crc_func
+    else:
+        if sizeBits > 8:
+            crcLowerMask = (1 << (sizeBits - 8)) - 1
+            firstShift = sizeBits - 8
+            def crc_func(data, crc, table):
+                crc = crc & crcMask
+                for x in data:
+                    crc = table[(ord(x) ^ (crc >> firstShift)) & 0xFF] ^ ((crc & crcLowerMask) << 8)
+                return crc
+            return crc_func
+        elif sizeBits == 8:
+            def crc_func(data, crc, table):
+                crc = crc & crcMask
+                for x in data:
+                    crc = table[(ord(x) ^ crc) & 0xFF]
+                return crc
+            return crc_func
+        else: # sizeBits < 8
+            firstShift = 8 - sizeBits
+            print firstShift
+            def crc_func(data, crc, table):
+                crc = crc & crcMask
+                for x in data:
+                    crc = table[(ord(x) ^ (crc << firstShift)) & 0xFF]
+                return crc
+            return crc_func
 
-def _mkGenericCrcFun_r(poly, sizeBits, initCrc, rev, xorOut):
-    crcMask = (1 << sizeBits) - 1
-    if sizeBits > 8:
-        def crc_func(data, crc, table):
-            crc = crc & crcMask
-            for x in data:
-                crc = table[(ord(x) ^ crc) & 0xFF] ^ (crc >> 8)
-            return crc
-        return crc_func
-    else: # sizeBites <= 8
-        def crc_func(data, crc, table):
-            crc = crc & crcMask
-            for x in data:
-                crc = table[(ord(x) ^ crc) & 0xFF]
-            return crc
-        return crc_func
+#-----------------------------------------------------------------------------
+# The following function returns a Python function to compute the CRC,
+# using generic versions of C extension functions.
+# It is designed to work with any CRC width, and may be used when
+# there is no width-specialised function for the selected CRC width.
+#
+# It must be passed parameters that are already verified & sanitized by
+# _verifyParams().
+#
+# The returned function uses a generic C extension function.
+#
+# Returns a tuple containing the function, and the size (in bits)
+# of the packed table entries the function requires.
+
+def _mkGenericCrcFunC(poly, sizeBits, initCrc, rev, xorOut):
+    packedTableSize = None
+    if rev:
+        if sizeBits <= 64:
+            # Round up to multiple of 8
+            roundedSizeBits = (sizeBits + 7) & ~7
+            crc_func = _sizeMap[roundedSizeBits][1]
+            packedTableSize = roundedSizeBits
+            return (crc_func, packedTableSize)
+        else: # sizeBits > 64
+            raise ValueError("Cannot handle CRC width > 64")
+    else:
+        if sizeBits <= 8:
+            def crc_func(data, crc, table):
+                return _crcfun._crc_generic_8(data, crc, sizeBits, table)
+            packedTableSize = 8
+            return (crc_func, packedTableSize)
+        elif sizeBits <= 32:
+            def crc_func(data, crc, table):
+                return _crcfun._crc_generic_32(data, crc, sizeBits, table)
+            packedTableSize = 32
+            return (crc_func, packedTableSize)
+        elif sizeBits <= 64:
+            def crc_func(data, crc, table):
+                return _crcfun._crc_generic_64(data, crc, sizeBits, table)
+            packedTableSize = 64
+            return (crc_func, packedTableSize)
+        else: # sizeBits > 64
+            raise ValueError("Cannot handle CRC width > 64")
 
 #-----------------------------------------------------------------------------
 # The following function returns a Python function to compute the CRC.
@@ -497,25 +540,28 @@ def _mkGenericCrcFun_r(poly, sizeBits, initCrc, rev, xorOut):
 # In addition to this function, a list containing the CRC table is returned.
 
 def _mkCrcFun(poly, sizeBits, initCrc, rev, xorOut):
-    usePackedTable = _usingExtension
+    packedTableSize = None
     if rev:
         tableList = _mkTable_r(poly, sizeBits)
-        try:
-            _fun = _sizeMap[sizeBits][1]
-        except KeyError:
-            _fun = _mkGenericCrcFun_r(poly, sizeBits, initCrc, rev, xorOut)
-            usePackedTable = False
     else:
         tableList = _mkTable(poly, sizeBits)
-        try:
+
+    try:
+        if rev:
+            _fun = _sizeMap[sizeBits][1]
+        else:
             _fun = _sizeMap[sizeBits][0]
-        except KeyError:
-            _fun = _mkGenericCrcFun(poly, sizeBits, initCrc, rev, xorOut)
-            usePackedTable = False
+        packedTableSize = sizeBits
+    except KeyError:
+        if _usingExtension:
+            (_fun, packedTableSize) = _mkGenericCrcFunC(poly, sizeBits, initCrc, rev, xorOut)
+        else:
+            _fun = _mkGenericCrcFunPython(poly, sizeBits, initCrc, rev, xorOut)
+            packedTableSize = None
 
     _table = tableList
-    if usePackedTable:
-        _table = struct.pack(_sizeToTypeCode[sizeBits], *tableList)
+    if packedTableSize != None:
+        _table = struct.pack(_sizeToTypeCode[packedTableSize], *tableList)
 
     if xorOut == 0:
         def crcfun(data, crc=initCrc, table=_table, fun=_fun):
