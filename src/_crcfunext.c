@@ -57,6 +57,10 @@ typedef unsigned long long UINT64;
 #define INPUT32 "s#Is#"
 #define INPUT64 "s#Ks#"
 
+#define INPUT8_GENERIC "s#Bbs#"
+#define INPUT32_GENERIC "s#Ibs#"
+#define INPUT64_GENERIC "s#Kbs#"
+
 // Define some macros that extract the specified byte from an integral value in
 // what should be a platform independent manner.
 #define BYTE0(x) ((UINT8)(x))
@@ -472,6 +476,175 @@ _crc64r(PyObject* self, PyObject* args)
 }
 
 //-----------------------------------------------------------------------------
+// Compute a 8-bit crc over the input data.
+// Inputs:
+//   data - string containing the data
+//   crc - unsigned integer containing the initial crc
+//   sizeBits - unsigned integer containing CRC width, in bits
+//   table - string containing the 8-bit table corresponding to the generator
+//           polynomial.
+// Returns:
+//   crc - unsigned integer containing the resulting crc
+
+static PyObject*
+_crc_generic_8(PyObject* self, PyObject* args)
+{
+    UINT8 crc;
+    UINT8 sizeBits;
+    UINT8* data;
+    Py_ssize_t dataLen;
+    UINT8* table;
+    Py_ssize_t tableLen;
+    UINT8 firstShift;
+
+    if (!PyArg_ParseTuple(args, INPUT8_GENERIC, &data, &dataLen, &crc,
+                            &sizeBits, &table, &tableLen))
+    {
+        return NULL;
+    }
+
+    if (tableLen != 256)
+    {
+        PyErr_SetString(PyExc_ValueError, "invalid CRC table");
+        return NULL;
+    }
+
+    if (sizeBits > 8)
+    {
+        PyErr_SetString(PyExc_ValueError, "invalid CRC width");
+        return NULL;
+    }
+
+    firstShift = 8 - sizeBits;
+
+    while (dataLen--)
+    {
+        crc = table[*data ^ ((crc << firstShift) & 0xFF)];
+        data++;
+    }
+
+    return PyInt_FromLong((long)crc);
+}
+
+//-----------------------------------------------------------------------------
+// Compute a 32-bit crc over the input data.
+// Inputs:
+//   data - string containing the data
+//   crc - unsigned integer containing the initial crc
+//   sizeBits - unsigned integer containing CRC width, in bits
+//   table - string containing the 32-bit table corresponding to the generator
+//           polynomial.
+// Returns:
+//   crc - unsigned integer containing the resulting crc
+
+static PyObject*
+_crc_generic_32(PyObject* self, PyObject* args)
+{
+    UINT32 crc;
+    UINT8 sizeBits;
+    UINT8* data;
+    Py_ssize_t dataLen;
+    UINT32* table;
+    Py_ssize_t tableLen;
+    UINT8 firstShift;
+
+    if (!PyArg_ParseTuple(args, INPUT32_GENERIC, &data, &dataLen, &crc,
+                            &sizeBits, &table, &tableLen))
+    {
+        return NULL;
+    }
+
+    if (tableLen != 256*4)
+    {
+        PyErr_SetString(PyExc_ValueError, "invalid CRC table");
+        return NULL;
+    }
+
+    if ((sizeBits < 8) || (sizeBits > 32))
+    {
+        PyErr_SetString(PyExc_ValueError, "invalid CRC width");
+        return NULL;
+    }
+
+    firstShift = sizeBits - 8;
+
+    while (dataLen--)
+    {
+        crc = table[*data ^ ((crc >> firstShift) & 0xFF)] ^ (crc << 8);
+        data++;
+    }
+    crc &= (1UL << sizeBits) - 1UL;
+
+    if (sizeBits < LONG_BIT)
+    {
+        return PyInt_FromLong((long)crc);
+    }
+    else
+    {
+        return PyLong_FromUnsignedLong(crc);
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Compute a 64-bit crc over the input data.
+// Inputs:
+//   data - string containing the data
+//   crc - unsigned integer containing the initial crc
+//   sizeBits - unsigned integer containing CRC width, in bits
+//   table - string containing the 64-bit table corresponding to the generator
+//           polynomial.
+// Returns:
+//   crc - unsigned integer containing the resulting crc
+
+static PyObject*
+_crc_generic_64(PyObject* self, PyObject* args)
+{
+    UINT64 crc;
+    UINT8 sizeBits;
+    UINT8* data;
+    Py_ssize_t dataLen;
+    UINT64* table;
+    Py_ssize_t tableLen;
+    UINT8 firstShift;
+
+    if (!PyArg_ParseTuple(args, INPUT64_GENERIC, &data, &dataLen, &crc,
+                            &sizeBits, &table, &tableLen))
+    {
+        return NULL;
+    }
+
+    if (tableLen != 256*8)
+    {
+        PyErr_SetString(PyExc_ValueError, "invalid CRC table");
+        return NULL;
+    }
+
+    if ((sizeBits < 8) || (sizeBits > 64))
+    {
+        PyErr_SetString(PyExc_ValueError, "invalid CRC width");
+        return NULL;
+    }
+
+    firstShift = sizeBits - 8;
+
+    while (dataLen--)
+    {
+        crc = table[*data ^ ((crc >> firstShift) & 0xFF)] ^ (crc << 8);
+        data++;
+    }
+    crc &= (1ULL << sizeBits) - 1ULL;
+
+    if (sizeBits < LONG_BIT)
+    {
+        return PyInt_FromLong((long)crc);
+    }
+    else
+    {
+        return PyLong_FromUnsignedLongLong(crc);
+    }
+}
+
+//-----------------------------------------------------------------------------
 static PyMethodDef methodTable[] = {
 {"_crc8", _crc8, METH_VARARGS},
 {"_crc8r", _crc8r, METH_VARARGS},
@@ -483,6 +656,9 @@ static PyMethodDef methodTable[] = {
 {"_crc32r", _crc32r, METH_VARARGS},
 {"_crc64", _crc64, METH_VARARGS},
 {"_crc64r", _crc64r, METH_VARARGS},
+{"_crc_generic_8", _crc_generic_8, METH_VARARGS},
+{"_crc_generic_32", _crc_generic_32, METH_VARARGS},
+{"_crc_generic_64", _crc_generic_64, METH_VARARGS},
 {NULL, NULL}
 };
 
