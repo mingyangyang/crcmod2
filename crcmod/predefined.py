@@ -99,6 +99,24 @@ _crc_definitions_table = [
     [   'crc-64',           'Crc64',            0x1000000000000001B,    REVERSE,        0x0000000000000000, 0x0000000000000000, 0x46A5A9388A5BEFFE, ],
     [   'crc-64-we',        'Crc64We',          0x142F0E1EBA9EA3693,    NON_REVERSE,    0x0000000000000000, 0xFFFFFFFFFFFFFFFF, 0x62EC59E3F1A4F00A, ],
     [   'crc-64-jones',     'Crc64Jones',       0x1AD93D23594C935A9,    REVERSE,        0xFFFFFFFFFFFFFFFF, 0x0000000000000000, 0xCAA717168609F281, ],
+
+# Other unusual widths
+#       Name                Identifier-name,    Poly            Reverse         Init-value      XOR-out     Check
+    [   'crc-3-rohc',       'Crc3Rohc',         0xB,            REVERSE,        0x7,            0x0,        0x6,        ],
+    [   'crc-4-itu',        'Crc3Itu',          0x13,           REVERSE,        0x00,           0x00,       0x07,       ],
+    [   'crc-5-epc',        'Crc5Epc',          0x29,           NON_REVERSE,    0x09,           0x00,       0x00,       ],
+    [   'crc-5-itu',        'Crc5Itu',          0x35,           REVERSE,        0x00,           0x00,       0x07,       ],
+    [   'crc-5-usb',        'Crc5Usb',          0x25,           REVERSE,        0x00,           0x1F,       0x19,       ],
+    [   'crc-6-itu',        'Crc5Itu',          0x43,           REVERSE,        0x00,           0x00,       0x06,       ],
+    [   'crc-7',            'Crc7',             0x89,           NON_REVERSE,    0x00,           0x00,       0x75,       ],
+    [   'crc-7-rohc',       'Crc7Rohc',         0xCF,           REVERSE,        0x7F,           0x00,       0x53,       ],
+    [   'crc-10',           'Crc10',            0x633,          NON_REVERSE,    0x000,          0x000,      0x199,      ],
+    [   'crc-11',           'Crc11',            0xB85,          NON_REVERSE,    0x01A,          0x000,      0x5A3,      ],
+    [   'crc-14-darc',      'Crc14Darc',        0x4805,         REVERSE,        0x0000,         0x0000,     0x082D,     ],
+    [   'crc-15',           'Crc15',            0xC599,         NON_REVERSE,    0x0000,         0x0000,     0x059E,     ],
+
+#       Name                Identifier-name,    Poly                    Reverse         Init-value          XOR-out             Check
+    [   'crc-40-gsm',       'Crc40Gsm',         0x10004820009,          NON_REVERSE,    0x0000000000,       0x0000000000,       0x2BE9B039B9,   ],
 ]
 
 
