@@ -1,0 +1,7 @@
+include README
+include LICENSE
+include changelog
+include setup.py
+include setup_py.py
+recursive-include py2 *
+recursive-include py3 *
